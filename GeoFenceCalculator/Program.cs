@@ -6,22 +6,49 @@ public class Program
 {
     public static void Main(string[] args)
     {
+        double totalHours = 0;
+
         var geofenceData = FileDataToList();
         var vehicleIds = geofenceData.Select(period => period.VehicleId).Distinct().ToList();
-        var filteredData = FilteredToBusinessHours(geofenceData, vehicleIds);
-        var vehicleCounts = VehiclesOutSideGeoFence(filteredData, vehicleIds);
+        var intervals = NumberOfIntervals(geofenceData);
 
-        // Print the results table
-        Console.WriteLine("Vehicles sold\t\tHours per week with no vehicle available");
-        for (int i = 0; i <= vehicleCounts.Count - 1; i++)
+        // Group intervals by VehicleId and calculate the sum of MinutesInterval for each group
+        var vehicleIntervalSum = intervals
+            .GroupBy(interval => interval.VehicleId)
+            .Select(group => new { VehicleId = group.Key, TotalMinutesInterval = group.Sum(interval => interval.MinutesInterval) })
+            .ToList();
+
+        foreach (var vehicleId in vehicleIds)
         {
-            Console.WriteLine($"{i}\t\t\t{vehicleCounts[i] * 15 / 60.0}");// Convert to hours
+            var totalMinutesInterval = vehicleIntervalSum.FirstOrDefault(item => item.VehicleId == vehicleId)?.TotalMinutesInterval ?? 0;
+            var totalHoursPerVehicle = totalMinutesInterval / 60.0; // Convert minutes to hours
+            totalHours = totalHours + totalHoursPerVehicle;
         }
 
-        // Calculate the sum of hours with no vehicles
-        double totalHoursWithNoVehicles = vehicleCounts.Sum() * 15 / 60.0;// Convert to hours
-        double totalWorkingHours = 42.5;
-        Console.WriteLine($"Total\t{totalHoursWithNoVehicles}");
+        // Print the results table header
+        Console.WriteLine("Vehicles sold\tHours per week with no vehicle available");
+
+        for (int i = 0; i < vehicleIds.Count; i++)
+        {
+            double weekHours = 42.5;
+            double hoursAfterSell = 0;
+            if (i == 0)
+            {
+                Console.WriteLine($"{i} \t\t {weekHours - totalHours}");
+            }
+            else if (i < vehicleIntervalSum.Count - 1)
+            {
+                totalHours += vehicleIntervalSum[i].TotalMinutesInterval / 60.0; // Convert minutes to hours
+                hoursAfterSell = weekHours - totalHours;
+                Console.WriteLine($"{i}\t\t{totalHours}");
+            }
+            else
+            {
+                Console.WriteLine($"{i}\t\t{totalHours}");
+            }
+
+        }
+        Console.WriteLine($"{12}\t\t{42.5}");
     }
 
     public static List<GeofencePeriod> FileDataToList()
@@ -48,13 +75,13 @@ public class Program
         return geofenceData;
     }
 
-    public static List<GeofencePeriod> FilteredToBusinessHours(List<GeofencePeriod> geofenceData, List<int> vehicleIds)
+    public static List<TimeInterval> NumberOfIntervals(List<GeofencePeriod> geofenceData)
     {
 
-        // Filter data to business hours for each day until exit time
-        List<GeofencePeriod> filteredData = new List<GeofencePeriod>();
+        List<TimeInterval> vehicleCounts = new List<TimeInterval>();
         foreach (var period in geofenceData)
         {
+            // Filter data to business hours for each day until exit time
             if ((period.EnterTime.DayOfWeek != DayOfWeek.Saturday && period.ExitTime.DayOfWeek != DayOfWeek.Saturday) && (period.EnterTime.DayOfWeek != DayOfWeek.Sunday && period.ExitTime.DayOfWeek != DayOfWeek.Sunday))
             {
                 DateTime currentDate = period.EnterTime.Date;
@@ -65,73 +92,34 @@ public class Program
 
                     if (period.EnterTime < endOfWorkingHours && period.ExitTime > startOfWorkingHours)
                     {
-                        DateTime filteredEnterTime = (period.EnterTime >= startOfWorkingHours) && (period.EnterTime <= endOfWorkingHours) ? period.EnterTime : startOfWorkingHours;
-                        DateTime filteredExitTime = (period.ExitTime >= startOfWorkingHours) && (period.ExitTime <= endOfWorkingHours) ? period.ExitTime : endOfWorkingHours;
+                        var filteredEnterTime = (period.EnterTime >= startOfWorkingHours) && (period.EnterTime <= endOfWorkingHours) ? period.EnterTime : startOfWorkingHours;
+                        var filteredExitTime = (period.ExitTime >= startOfWorkingHours) && (period.ExitTime <= endOfWorkingHours) ? period.ExitTime : endOfWorkingHours;
 
-                        filteredData.Add(new GeofencePeriod
-                        {
-                            VehicleId = period.VehicleId,
-                            EnterTime = filteredEnterTime,
-                            ExitTime = filteredExitTime
-                        });
+                        vehicleCounts.Add(MinutesIntervalsInSideGeoFence(filteredEnterTime, filteredExitTime, period.VehicleId));
                     }
+
 
                     currentDate = currentDate.AddDays(1); // Move to the next day
                 }
             }
 
         }
-        return filteredData;
-    }
-
-    public static List<int> VehiclesOutSideGeoFence(List<GeofencePeriod> filteredData, List<int> vehicleIds)
-    {
-        // Group data by 15-minutes periods and count unique vehicles
-        DateTime startTime = filteredData.Min(period => period.EnterTime);
-        DateTime endTime = filteredData.Max(period => period.ExitTime);
-        TimeSpan interval = TimeSpan.FromMinutes(15);
-
-        List<int> vehicleCounts = new List<int>();
-        int vehicleIndex = 0;
-        for (int i = 0; i <= vehicleIds.Count - 1; i++)
-        {
-            if (vehicleIndex == filteredData.Count())
-            {
-                break;
-            }
-            else
-            {
-                int hoursWithNoVehicles = 0;
-
-                for (DateTime time = startTime; time < endTime; time += interval)
-                {
-
-                    if (vehicleIndex == filteredData.Count()) break;
-                    if (filteredData.ElementAt(vehicleIndex).VehicleId == vehicleIds[i])
-                    {
-                        int vehiclesInside = filteredData
-                        .Count(period => period.EnterTime >= time && period.ExitTime <= time.Add(interval));
-
-                        if (vehiclesInside == 0)
-                        {
-                            hoursWithNoVehicles++;
-                        }
-
-                    }
-                    else
-                    {
-                        vehicleIndex++;
-                        break;
-
-                    }
-                    vehicleIndex++;
-
-                }
-
-                vehicleCounts.Add(hoursWithNoVehicles);
-            }
-
-        }
         return vehicleCounts;
     }
+
+    public static TimeInterval MinutesIntervalsInSideGeoFence(DateTime enterTime, DateTime exitTime, int vehicleId)
+    {
+        // Group data by 15-minutes periods
+
+        double minutesIntervalsInSideGeoFence = Double.Parse((exitTime.TimeOfDay - enterTime.TimeOfDay).TotalMinutes.ToString()) / 15;
+
+        var timeInterval = new TimeInterval
+        {
+            VehicleId = vehicleId,
+            MinutesInterval = minutesIntervalsInSideGeoFence
+        };
+
+        return timeInterval;
+    }
+
 }

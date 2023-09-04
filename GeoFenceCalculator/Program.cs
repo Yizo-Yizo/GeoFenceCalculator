@@ -9,25 +9,9 @@ public class Program
         var geofenceData = FileDataToList();
         var vehicleIds = geofenceData.Select(period => period.VehicleId).Distinct().ToList();
         var filteredData = FilteredToBusinessHours(geofenceData, vehicleIds);
+        var vehicleCounts = VehiclesOutSideGeoFence(filteredData, vehicleIds);
 
-        var vehicleIdsIndex = 0;
-        List<double> hoursVehiclesNotAvailable = new List<double>();
-        while (vehicleIdsIndex != vehicleIds.Count)
-        {
-
-            var vehicleCounts = VehiclesOutSideGeoFence(filteredData, vehicleIds, vehicleIdsIndex);
-            double totalHoursWithNoVehicles = vehicleCounts.Sum() * 15 / 60.0;// Convert to hours
-            hoursVehiclesNotAvailable.Add(totalHoursWithNoVehicles);
-            vehicleIdsIndex++;
-        }
-
-        Console.WriteLine("Vehicles sold\t\tHours per week with no vehicle available");
-        for (int i = 0; i <= hoursVehiclesNotAvailable.Count - 1; i++)
-        {
-            Console.WriteLine($"{i}\t\t\t{hoursVehiclesNotAvailable[i]}");
-        }
-
-        /*// Print the results table
+        // Print the results table
         Console.WriteLine("Vehicles sold\t\tHours per week with no vehicle available");
         for (int i = 0; i <= vehicleCounts.Count - 1; i++)
         {
@@ -37,7 +21,7 @@ public class Program
         // Calculate the sum of hours with no vehicles
         double totalHoursWithNoVehicles = vehicleCounts.Sum() * 15 / 60.0;// Convert to hours
         double totalWorkingHours = 42.5;
-        Console.WriteLine($"Total\t{totalHoursWithNoVehicles}");*/
+        Console.WriteLine($"Total\t{totalHoursWithNoVehicles}");
     }
 
     public static List<GeofencePeriod> FileDataToList()
@@ -100,7 +84,7 @@ public class Program
         return filteredData;
     }
 
-    public static List<int> VehiclesOutSideGeoFence(List<GeofencePeriod> filteredData, List<int> vehicleIds, int vehicleIdsIndex)
+    public static List<int> VehiclesOutSideGeoFence(List<GeofencePeriod> filteredData, List<int> vehicleIds)
     {
         // Group data by 15-minutes periods and count unique vehicles
         DateTime startTime = filteredData.Min(period => period.EnterTime);
